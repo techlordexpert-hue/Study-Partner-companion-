@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { PastQuestion, UserProfile, QuizAttempt, CustomUploadedPasco } from "../types";
+import { extractTextFromFile, extractDocumentData } from "../utils/documentExtractor";
 import {
   HelpCircle,
   CheckCircle,
@@ -116,7 +117,7 @@ export const PascoTab: React.FC<PascoTabProps> = ({
   };
 
   // Handle File Change
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setSelectedFile(file);
@@ -124,14 +125,13 @@ export const PascoTab: React.FC<PascoTabProps> = ({
         setUploadTitle(file.name.replace(/\.[^/.]+$/, ""));
       }
 
-      if (file.name.endsWith(".txt") || file.name.endsWith(".md")) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          if (event.target?.result) {
-            setUploadText(event.target.result as string);
-          }
-        };
-        reader.readAsText(file);
+      try {
+        const docData = await extractDocumentData(file);
+        if (docData.fullText) {
+          setUploadText(docData.fullText);
+        }
+      } catch (err) {
+        console.warn("Error extracting text on file change:", err);
       }
     }
   };
@@ -145,7 +145,13 @@ export const PascoTab: React.FC<PascoTabProps> = ({
       let fileBase64 = "";
       let fileMimeType = "";
 
+      let effectiveText = uploadText.trim();
       if (selectedFile) {
+        const docData = await extractDocumentData(selectedFile);
+        if (docData.fullText && !effectiveText) {
+          effectiveText = docData.fullText;
+        }
+
         fileMimeType = selectedFile.type || "application/pdf";
         if (selectedFile.name.endsWith(".pptx")) fileMimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
         else if (selectedFile.name.endsWith(".ppt")) fileMimeType = "application/vnd.ms-powerpoint";
@@ -173,7 +179,7 @@ export const PascoTab: React.FC<PascoTabProps> = ({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             title: uploadTitle,
-            rawText: uploadText,
+            rawText: effectiveText,
             fileBase64,
             fileMimeType,
           }),
@@ -192,20 +198,47 @@ export const PascoTab: React.FC<PascoTabProps> = ({
 
       // Fallback client-side quiz generation if API returned non-JSON, 404 or failed on Vercel
       if (questionList.length === 0) {
-        questionList = [
-          {
-            question: `Which statement best describes ${uploadTitle}?`,
-            options: [
-              `It is a fundamental concept in ${uploadTitle}`,
-              `It is unrelated to course material`,
-              `It is deprecated syntax`,
-              `It is a hardware device`,
-            ],
-            answer: `It is a fundamental concept in ${uploadTitle}`,
-            explanation: `Reviewing course notes for ${uploadTitle} provides foundational understanding for exam questions.`,
-            topic: uploadTitle,
-          },
-        ];
+        if (effectiveText && effectiveText.length > 30) {
+          const sentences = effectiveText
+            .split(/(?:\r?\n)+|\.\s+/)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 15);
+
+          if (sentences.length > 0) {
+            questionList = sentences.slice(0, 10).map((sentence, idx) => {
+              const snippet = sentence.slice(0, 70);
+              return {
+                question: `Based on uploaded document material (${idx + 1}): "${snippet}...", which concept is emphasized?`,
+                options: [
+                  `Key principle: "${sentence.slice(0, 50)}..."`,
+                  `It represents deprecated legacy architecture`,
+                  `It is an optional configuration parameter`,
+                  `None of the above`,
+                ],
+                answer: `Key principle: "${sentence.slice(0, 50)}..."`,
+                explanation: `Direct excerpt from uploaded document: "${sentence}"`,
+                topic: uploadTitle,
+              };
+            });
+          }
+        }
+
+        if (questionList.length === 0) {
+          questionList = [
+            {
+              question: `Which statement best describes ${uploadTitle}?`,
+              options: [
+                `It is a fundamental concept in ${uploadTitle}`,
+                `It is unrelated to course material`,
+                `It is deprecated syntax`,
+                `It is a hardware device`,
+              ],
+              answer: `It is a fundamental concept in ${uploadTitle}`,
+              explanation: `Reviewing course notes for ${uploadTitle} provides foundational understanding for exam questions.`,
+              topic: uploadTitle,
+            },
+          ];
+        }
       }
 
       const parsedQuestions: PastQuestion[] = questionList.map((q: any, idx: number) => ({

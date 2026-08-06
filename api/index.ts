@@ -112,10 +112,11 @@ app.post("/api/parse-slide-content", async (req, res) => {
 
     const ai = getAIClient();
     if (!ai) {
-      const lines = (rawText || "Slide 1 Content").split("\n").filter((l: string) => l.trim().length > 0);
+      const textToParse = rawText && rawText.trim().length > 10 ? rawText.trim() : `Overview and lecture material for ${title || "Course Material"}.`;
+      const lines = textToParse.split("\n").filter((l: string) => l.trim().length > 0);
       const slides = [];
       let currentSlide = {
-        title: title || "Slide 1",
+        title: title || "Lecture Notes",
         text: "",
         explanation: "Key takeaway from uploaded lecture material.",
         youtubeQuery: `${title || "lecture"} tutorial`,
@@ -125,7 +126,7 @@ app.post("/api/parse-slide-content", async (req, res) => {
         if (i > 0 && i % 4 === 0) {
           slides.push(currentSlide);
           currentSlide = {
-            title: `Slide ${slides.length + 1}`,
+            title: `${title || "Slide"} - Part ${slides.length + 1}`,
             text: lines[i],
             explanation: "Key takeaway from uploaded lecture material.",
             youtubeQuery: `${lines[i].slice(0, 30)} tutorial`,
@@ -139,7 +140,7 @@ app.post("/api/parse-slide-content", async (req, res) => {
     }
 
     const parts: any[] = [];
-    if (fileBase64 && fileMimeType) {
+    if (fileBase64 && fileMimeType && (fileMimeType === "application/pdf" || fileMimeType.startsWith("image/"))) {
       parts.push({
         inlineData: {
           mimeType: fileMimeType,
@@ -152,7 +153,7 @@ app.post("/api/parse-slide-content", async (req, res) => {
 Parse the provided document file or text notes into a clean, structured array of individual PowerPoint slides for student study.
 
 Title / Course Name: ${title || "Uploaded Course Document"}
-${rawText ? `Additional Notes Text: ${rawText}` : ""}
+${rawText ? `Extracted Text Content:\n${rawText.slice(0, 15000)}` : ""}
 
 Instructions:
 1. Extract or generate 4 to 12 logically ordered PowerPoint slides covering all key concepts.
@@ -216,7 +217,7 @@ app.post("/api/parse-past-questions", async (req, res) => {
     }
 
     const parts: any[] = [];
-    if (fileBase64 && fileMimeType) {
+    if (fileBase64 && fileMimeType && (fileMimeType === "application/pdf" || fileMimeType.startsWith("image/"))) {
       parts.push({
         inlineData: {
           mimeType: fileMimeType,
@@ -229,7 +230,7 @@ app.post("/api/parse-past-questions", async (req, res) => {
 Parse the provided document or text into structured, high-quality multiple-choice quiz questions for student practice.
 
 Document Title / Subject: ${title || "Course Past Questions"}
-${rawText ? `Text Content: ${rawText.slice(0, 8000)}` : ""}
+${rawText ? `Text Content: ${rawText.slice(0, 15000)}` : ""}
 
 Instructions:
 1. Extract existing questions OR create 5 to 12 interactive multiple-choice questions covering all key topics in the material.

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Course, LectureModule, Slide, UserProfile, CustomUploadedSlide } from "../types";
 import { PowerPointSlideRenderer } from "./PowerPointSlideRenderer";
+import { extractTextFromFile, extractDocumentData } from "../utils/documentExtractor";
 import {
   BookOpen,
   Search,
@@ -116,7 +117,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
   };
 
   // Handle Document File Selection
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setSelectedFile(file);
@@ -125,14 +126,13 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
         setUploadTitle(cleanName);
       }
 
-      if (file.name.endsWith(".txt") || file.name.endsWith(".md")) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          if (event.target?.result) {
-            setUploadText(event.target.result as string);
-          }
-        };
-        reader.readAsText(file);
+      try {
+        const docData = await extractDocumentData(file);
+        if (docData.fullText) {
+          setUploadText(docData.fullText);
+        }
+      } catch (err) {
+        console.warn("Error extracting text on file change:", err);
       }
     }
   };
@@ -182,7 +182,18 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
       let fileBase64 = "";
       let fileMimeType = "";
 
+      let effectiveText = uploadText.trim();
+      let extractedSlidesFromZip: any[] = [];
+
       if (selectedFile) {
+        const docData = await extractDocumentData(selectedFile);
+        if (docData.fullText && !effectiveText) {
+          effectiveText = docData.fullText;
+        }
+        if (docData.slides && docData.slides.length > 0) {
+          extractedSlidesFromZip = docData.slides;
+        }
+
         fileMimeType = selectedFile.type || "application/pdf";
         if (selectedFile.name.endsWith(".pptx"))
           fileMimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
@@ -215,7 +226,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             title: uploadTitle,
-            rawText: uploadText,
+            rawText: effectiveText,
             fileBase64,
             fileMimeType,
           }),
@@ -234,27 +245,46 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
       // Fallback client-side slide generation if API returned non-JSON, 404 or failed
       if (slidesList.length === 0) {
-        const contentSource = uploadText.trim() || (selectedFile ? `Extracted presentation notes from ${selectedFile.name}` : uploadTitle);
-        const textSections = contentSource.split(/\n\s*\n/).filter((s) => s.trim().length > 0);
-
-        if (textSections.length > 0) {
-          slidesList = textSections.map((sec, i) => ({
-            title: i === 0 ? uploadTitle : `${uploadTitle} - Part ${i + 1}`,
-            text: sec,
-            explanation: `Key takeaway and exam notes for ${uploadTitle}.`,
-            youtubeQuery: `${uploadTitle} tutorial`,
-            researchTopics: [uploadTitle],
+        if (extractedSlidesFromZip.length > 0) {
+          slidesList = extractedSlidesFromZip.map((s) => ({
+            title: s.title,
+            text: s.text,
+            explanation: `Extracted slide material from ${uploadTitle}.`,
+            youtubeQuery: `${s.title} ${uploadTitle} tutorial`,
+            researchTopics: [s.title, uploadTitle],
           }));
         } else {
-          slidesList = [
-            {
-              title: uploadTitle,
-              text: `Slide content for ${uploadTitle}.`,
-              explanation: `Overview of ${uploadTitle}.`,
-              youtubeQuery: `${uploadTitle} tutorial`,
-              researchTopics: [uploadTitle],
-            },
-          ];
+          const contentSource = effectiveText || (selectedFile ? `Extracted presentation material from ${selectedFile.name}` : uploadTitle);
+          const textSections = contentSource
+            .split(/(?:\r?\n){2,}|\n(?=[-•*\d]+\.?\s+)/)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+
+          if (textSections.length > 0) {
+            const chunkSize = 2;
+            for (let i = 0; i < textSections.length; i += chunkSize) {
+              const chunk = textSections.slice(i, i + chunkSize).join("\n\n");
+              const slideIndex = Math.floor(i / chunkSize) + 1;
+              const headingMatch = textSections[i].split("\n")[0].replace(/^[-•*\d]+\.?\s*/, "").slice(0, 50);
+              slidesList.push({
+                title: slideIndex === 1 ? uploadTitle : `${uploadTitle}: ${headingMatch || `Slide ${slideIndex}`}`,
+                text: chunk,
+                explanation: `Key takeaway and exam note for ${uploadTitle}.`,
+                youtubeQuery: `${headingMatch || uploadTitle} tutorial`,
+                researchTopics: [uploadTitle],
+              });
+            }
+          } else {
+            slidesList = [
+              {
+                title: uploadTitle,
+                text: contentSource,
+                explanation: `Overview and key notes for ${uploadTitle}.`,
+                youtubeQuery: `${uploadTitle} tutorial`,
+                researchTopics: [uploadTitle],
+              },
+            ];
+          }
         }
       }
 
@@ -264,7 +294,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
           id: `custom-${Date.now()}-${idx}`,
           slideNumber: idx + 1,
           title: s.title || `Slide ${idx + 1}`,
-          textContent: s.text || s.textContent || uploadText || "Slide Content",
+          textContent: s.text || s.textContent || effectiveText || "Slide Content",
           briefExplanation: s.explanation || "Key concept extracted from uploaded material.",
           youtubeTutorialUrl: `https://www.youtube-nocookie.com/embed?listType=search&list=${encodeURIComponent(
             query

@@ -120,11 +120,11 @@ Provide an encouraging, clear breakdown:
 
       const ai = getAIClient();
       if (!ai) {
-        // Fallback parser if no API key
-        const lines = (rawText || "Slide 1 Content").split("\n").filter((l: string) => l.trim().length > 0);
+        const textToParse = rawText && rawText.trim().length > 10 ? rawText.trim() : `Overview and lecture material for ${title || "Course Material"}.`;
+        const lines = textToParse.split("\n").filter((l: string) => l.trim().length > 0);
         const slides = [];
         let currentSlide = {
-          title: title || "Slide 1",
+          title: title || "Lecture Notes",
           text: "",
           explanation: "Key takeaway from uploaded lecture material.",
           youtubeQuery: `${title || "lecture"} tutorial`,
@@ -134,7 +134,7 @@ Provide an encouraging, clear breakdown:
           if (i > 0 && i % 4 === 0) {
             slides.push(currentSlide);
             currentSlide = {
-              title: `Slide ${slides.length + 1}`,
+              title: `${title || "Slide"} - Part ${slides.length + 1}`,
               text: lines[i],
               explanation: "Key takeaway from uploaded lecture material.",
               youtubeQuery: `${lines[i].slice(0, 30)} tutorial`,
@@ -149,7 +149,8 @@ Provide an encouraging, clear breakdown:
       }
 
       const parts: any[] = [];
-      if (fileBase64 && fileMimeType) {
+      // Only attach inlineData for supported binary mime types (PDF and Images)
+      if (fileBase64 && fileMimeType && (fileMimeType === "application/pdf" || fileMimeType.startsWith("image/"))) {
         parts.push({
           inlineData: {
             mimeType: fileMimeType,
@@ -162,7 +163,7 @@ Provide an encouraging, clear breakdown:
 Parse the provided document file or text notes into a clean, structured array of individual PowerPoint slides for student study.
 
 Title / Course Name: ${title || "Uploaded Course Document"}
-${rawText ? `Additional Notes Text: ${rawText}` : ""}
+${rawText ? `Extracted Text Content:\n${rawText.slice(0, 15000)}` : ""}
 
 Instructions:
 1. Extract or generate 4 to 12 logically ordered PowerPoint slides covering all key concepts.
@@ -226,7 +227,8 @@ Return a valid JSON array matching this schema:
       }
 
       const parts: any[] = [];
-      if (fileBase64 && fileMimeType) {
+      // Only attach inlineData for supported binary mime types (PDF and Images)
+      if (fileBase64 && fileMimeType && (fileMimeType === "application/pdf" || fileMimeType.startsWith("image/"))) {
         parts.push({
           inlineData: {
             mimeType: fileMimeType,
@@ -239,7 +241,7 @@ Return a valid JSON array matching this schema:
 Parse the provided document or text into structured, high-quality multiple-choice quiz questions for student practice.
 
 Document Title / Subject: ${title || "Course Past Questions"}
-${rawText ? `Text Content: ${rawText.slice(0, 8000)}` : ""}
+${rawText ? `Text Content: ${rawText.slice(0, 15000)}` : ""}
 
 Instructions:
 1. Extract existing questions OR create 5 to 12 interactive multiple-choice questions covering all key topics in the material.

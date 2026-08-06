@@ -142,38 +142,57 @@ export const PascoTab: React.FC<PascoTabProps> = ({
     setIsUploading(true);
 
     try {
-      let rawTextToParse = uploadText;
-      if (selectedFile && !rawTextToParse) {
-        const reader = new FileReader();
-        rawTextToParse = await new Promise<string>((resolve) => {
+      let fileBase64 = "";
+      let fileMimeType = "";
+
+      if (selectedFile) {
+        fileMimeType = selectedFile.type || "application/pdf";
+        if (selectedFile.name.endsWith(".pptx")) fileMimeType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+        else if (selectedFile.name.endsWith(".ppt")) fileMimeType = "application/vnd.ms-powerpoint";
+        else if (selectedFile.name.endsWith(".pdf")) fileMimeType = "application/pdf";
+        else if (selectedFile.name.endsWith(".docx")) fileMimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        else if (selectedFile.name.endsWith(".txt") || selectedFile.name.endsWith(".md")) fileMimeType = "text/plain";
+
+        fileBase64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
           reader.onload = (e) => {
-            const res = e.target?.result;
-            if (typeof res === "string") resolve(res);
-            else resolve(`Past Questions File: ${selectedFile.name}`);
+            const res = e.target?.result as string;
+            if (res && res.includes("base64,")) resolve(res.split("base64,")[1]);
+            else resolve("");
           };
-          reader.readAsText(selectedFile);
+          reader.onerror = () => resolve("");
+          reader.readAsDataURL(selectedFile);
         });
       }
 
       const response = await fetch("/api/parse-past-questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText: rawTextToParse }),
+        body: JSON.stringify({
+          title: uploadTitle,
+          rawText: uploadText,
+          fileBase64,
+          fileMimeType,
+        }),
       });
 
       const data = await response.json();
+      if (!data.questions || data.questions.length === 0) {
+        throw new Error("No questions generated");
+      }
+
       const parsedQuestions: PastQuestion[] = (data.questions || []).map((q: any, idx: number) => ({
         id: `custom-q-${Date.now()}-${idx}`,
-        year: "Custom Upload",
-        courseCode: "ICTE 242",
+        year: "Uploaded Quiz",
+        courseCode: "Course Material",
         courseTitle: uploadTitle,
         section: "Section A (MCQ)",
         questionNumber: idx + 1,
-        questionText: q.question,
-        options: q.options || ["Option A", "Option B", "Option C", "Option D"],
-        correctAnswer: q.answer || q.options?.[0],
-        explanation: q.explanation || "Custom uploaded question.",
-        topic: q.topic || "DBMS Fundamentals",
+        questionText: q.question || q.questionText,
+        options: q.options && q.options.length === 4 ? q.options : ["Option A", "Option B", "Option C", "Option D"],
+        correctAnswer: q.answer || q.correctAnswer || (q.options ? q.options[0] : "Option A"),
+        explanation: q.explanation || `Key rule for ${uploadTitle}`,
+        topic: q.topic || uploadTitle,
       }));
 
       const newCustomPasco: CustomUploadedPasco = {
@@ -184,14 +203,17 @@ export const PascoTab: React.FC<PascoTabProps> = ({
       };
 
       onAddCustomPasco(newCustomPasco);
+      setSelectedYearFilter("Uploaded Quiz");
       setIsUploadModalOpen(false);
       setUploadTitle("");
       setUploadText("");
       setSelectedFile(null);
       setCurrentQuestionIndex(0);
+      setIsAnswerSubmitted(false);
+      setSelectedOption(null);
     } catch (err) {
-      console.error(err);
-      alert("Error parsing uploaded past questions.");
+      console.error("Upload error:", err);
+      alert("Unable to parse document into quiz questions. Please ensure the file is valid or paste text directly.");
     } finally {
       setIsUploading(false);
     }
@@ -285,7 +307,7 @@ export const PascoTab: React.FC<PascoTabProps> = ({
             <Filter className="w-3.5 h-3.5 text-indigo-600" />
             Filter Exam Year:
           </div>
-          {["All", "2025 (Sir John)", "2023/2024", "2021/2022", "2020/2021"].map((year) => (
+          {["All", "Uploaded Quiz", "2025 (Sir John)", "2023/2024", "2021/2022", "2020/2021"].map((year) => (
             <button
               key={year}
               onClick={() => {

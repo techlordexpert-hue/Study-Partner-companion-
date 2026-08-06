@@ -79,6 +79,15 @@ export interface CustomUploadedPasco {
   questions: PastQuestion[];
 }
 
+export interface Course {
+  id: string;
+  code: string;
+  title: string;
+  description?: string;
+  isCustom?: boolean;
+  modules: LectureModule[];
+}
+
 export interface UserProfile {
   name: string;
   indexNumber: string;

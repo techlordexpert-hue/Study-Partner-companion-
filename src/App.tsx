@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { TabType, UserProfile, QuizAttempt, FocusSession, CustomUploadedSlide, CustomUploadedPasco } from "./types";
+import {
+  TabType,
+  UserProfile,
+  QuizAttempt,
+  FocusSession,
+  CustomUploadedSlide,
+  CustomUploadedPasco,
+  Course,
+  LectureModule
+} from "./types";
 import { lectureModules } from "./data/slidesData";
 import { pastQuestionsData } from "./data/pastQuestionsData";
 import { AuthGate } from "./components/AuthGate";
 import { Navbar } from "./components/Navbar";
+import { FocusTimerTopBar } from "./components/FocusTimerTopBar";
 import { LibraryTab } from "./components/LibraryTab";
 import { PascoTab } from "./components/PascoTab";
 import { FocusTab } from "./components/FocusTab";
@@ -26,10 +36,40 @@ const INITIAL_USER_PROFILE: UserProfile = {
   quizHistory: [],
 };
 
+const DEFAULT_COURSES: Course[] = [
+  {
+    id: "course-dbms",
+    code: "ICTE 242",
+    title: "Database Management Systems (DBMS)",
+    description: "Complete lecture slides covering database architecture, relational models, ERD, SQL, and normalization.",
+    isCustom: false,
+    modules: lectureModules,
+  },
+];
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>("library");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  
+
+  // Global Focus Timer State
+  const [timerIsRunning, setTimerIsRunning] = useState<boolean>(false);
+  const [timerSecondsElapsed, setTimerSecondsElapsed] = useState<number>(0);
+  const [timerMode, setTimerMode] = useState<"stopwatch" | "pomodoro">("stopwatch");
+  const [pomodoroTargetSeconds, setPomodoroTargetSeconds] = useState<number>(25 * 60);
+
+  // Global Timer Ticking Interval
+  useEffect(() => {
+    let interval: any = null;
+    if (timerIsRunning) {
+      interval = setInterval(() => {
+        setTimerSecondsElapsed((prev) => prev + 1);
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [timerIsRunning]);
+
   // Load user profile & session from localStorage
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     try {
@@ -47,6 +87,20 @@ export default function App() {
     return INITIAL_USER_PROFILE;
   });
 
+  // Courses state (Course-by-Course structure)
+  const [courses, setCourses] = useState<Course[]>(() => {
+    try {
+      const saved = localStorage.getItem("study_partner_courses");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn("Could not load courses from localStorage", e);
+    }
+    return DEFAULT_COURSES;
+  });
+
   // Save profile to localStorage on change
   useEffect(() => {
     try {
@@ -57,6 +111,15 @@ export default function App() {
       console.warn("Could not save user profile to localStorage", e);
     }
   }, [userProfile]);
+
+  // Save courses to localStorage on change
+  useEffect(() => {
+    try {
+      localStorage.setItem("study_partner_courses", JSON.stringify(courses));
+    } catch (e) {
+      console.warn("Could not save courses to localStorage", e);
+    }
+  }, [courses]);
 
   const handleAuthenticated = (profileData: { name: string; institution: string }) => {
     setUserProfile((prev) => ({
@@ -91,11 +154,69 @@ export default function App() {
     }));
   };
 
-  const handleAddCustomSlide = (customSlide: CustomUploadedSlide) => {
-    setUserProfile((prev) => ({
-      ...prev,
-      customSlides: [customSlide, ...prev.customSlides],
-    }));
+  // Timer Control Handlers
+  const handleStartTimer = () => setTimerIsRunning(true);
+  const handlePauseTimer = () => setTimerIsRunning(false);
+  const handleStopTimer = () => {
+    if (timerSecondsElapsed >= 60) {
+      const minutesSpent = Math.round(timerSecondsElapsed / 60);
+      handleLogFocusSession({
+        id: `fs-${Date.now()}`,
+        date: new Date().toLocaleDateString(),
+        durationMinutes: minutesSpent,
+        mode: timerMode,
+        notes: `Studied for ${minutesSpent} minutes in Focus Mode`,
+      });
+    }
+    setTimerIsRunning(false);
+    setTimerSecondsElapsed(0);
+  };
+
+  // Course Management Handlers
+  const handleAddCourse = (newCourse: Course) => {
+    setCourses((prev) => [newCourse, ...prev]);
+  };
+
+  const handleDeleteCourse = (courseId: string) => {
+    setCourses((prev) => prev.filter((c) => c.id !== courseId));
+  };
+
+  const handleAddSlideDeckToCourse = (courseId: string, customSlide: CustomUploadedSlide) => {
+    const newModule: LectureModule = {
+      id: customSlide.id,
+      code: "Uploaded Presentation",
+      title: customSlide.title,
+      subtitle: `Uploaded on ${customSlide.uploadedAt}`,
+      description: `User uploaded PowerPoint slides / lecture notes`,
+      iconName: "Presentation",
+      slides: customSlide.slides,
+    };
+
+    setCourses((prev) =>
+      prev.map((c) => {
+        if (c.id === courseId) {
+          return {
+            ...c,
+            modules: [newModule, ...c.modules],
+          };
+        }
+        return c;
+      })
+    );
+  };
+
+  const handleDeleteSlideDeck = (courseId: string, moduleId: string) => {
+    setCourses((prev) =>
+      prev.map((c) => {
+        if (c.id === courseId) {
+          return {
+            ...c,
+            modules: c.modules.filter((m) => m.id !== moduleId),
+          };
+        }
+        return c;
+      })
+    );
   };
 
   const handleAddCustomPasco = (customPasco: CustomUploadedPasco) => {
@@ -106,10 +227,13 @@ export default function App() {
   };
 
   const handleDeleteCustomSlide = (slideId: string) => {
-    setUserProfile((prev) => ({
-      ...prev,
-      customSlides: prev.customSlides.filter((s) => s.id !== slideId),
-    }));
+    // Search across all courses to remove
+    setCourses((prev) =>
+      prev.map((c) => ({
+        ...c,
+        modules: c.modules.filter((m) => m.id !== slideId),
+      }))
+    );
   };
 
   const handleDeleteCustomPasco = (pascoId: string) => {
@@ -150,14 +274,29 @@ export default function App() {
         onLogout={handleLogout}
       />
 
+      {/* Sticky Top Focus Timer Bar (Visible across ALL tabs when active/paused) */}
+      <FocusTimerTopBar
+        isRunning={timerIsRunning}
+        secondsElapsed={timerSecondsElapsed}
+        timerMode={timerMode}
+        pomodoroTargetSeconds={pomodoroTargetSeconds}
+        onToggleTimer={timerIsRunning ? handlePauseTimer : handleStartTimer}
+        onStopTimer={handleStopTimer}
+        onNavigateToFocus={() => setActiveTab("focus")}
+        activeTab={activeTab}
+      />
+
       {/* Main Tab Content */}
       <main className="flex-1 pb-16">
         {activeTab === "library" && (
           <LibraryTab
-            modules={lectureModules}
+            courses={courses}
             userProfile={userProfile}
             onToggleCompleteSlide={handleToggleCompleteSlide}
-            onAddCustomSlide={handleAddCustomSlide}
+            onAddCourse={handleAddCourse}
+            onDeleteCourse={handleDeleteCourse}
+            onAddSlideDeckToCourse={handleAddSlideDeckToCourse}
+            onDeleteSlideDeck={handleDeleteSlideDeck}
             onSaveNote={handleSaveNote}
           />
         )}
@@ -175,6 +314,15 @@ export default function App() {
           <FocusTab
             userProfile={userProfile}
             onLogFocusSession={handleLogFocusSession}
+            isRunning={timerIsRunning}
+            secondsElapsed={timerSecondsElapsed}
+            timerMode={timerMode}
+            pomodoroTargetSeconds={pomodoroTargetSeconds}
+            onStartTimer={handleStartTimer}
+            onPauseTimer={handlePauseTimer}
+            onStopTimer={handleStopTimer}
+            onSetTimerMode={setTimerMode}
+            onSetPomodoroTargetSeconds={setPomodoroTargetSeconds}
           />
         )}
 

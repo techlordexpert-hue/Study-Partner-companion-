@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import pptxgen from "pptxgenjs";
 import { Slide } from "../types";
 import { 
   ChevronLeft, 
@@ -12,7 +13,8 @@ import {
   Copy,
   Check,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Download
 } from "lucide-react";
 
 interface PowerPointSlideRendererProps {
@@ -21,6 +23,7 @@ interface PowerPointSlideRendererProps {
   totalSlides: number;
   moduleCode: string;
   moduleTitle: string;
+  allDeckSlides?: Slide[];
   onPrevSlide: () => void;
   onNextSlide: () => void;
   isCompleted: boolean;
@@ -34,6 +37,7 @@ export const PowerPointSlideRenderer: React.FC<PowerPointSlideRendererProps> = (
   totalSlides,
   moduleCode,
   moduleTitle,
+  allDeckSlides,
   onPrevSlide,
   onNextSlide,
   isCompleted,
@@ -43,6 +47,100 @@ export const PowerPointSlideRenderer: React.FC<PowerPointSlideRendererProps> = (
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showExplanation, setShowExplanation] = useState<boolean>(true);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
+
+  // Download entire slide deck as a genuine .pptx PowerPoint file
+  const handleExportPPTX = () => {
+    try {
+      const pres = new pptxgen();
+      pres.layout = "LAYOUT_16x9";
+      pres.author = "Study Partner";
+      pres.title = moduleTitle;
+
+      const slidesToExport = allDeckSlides && allDeckSlides.length > 0 ? allDeckSlides : [slide];
+
+      slidesToExport.forEach((s, idx) => {
+        const pptSlide = pres.addSlide();
+
+        // Top Banner Accent
+        pptSlide.addShape(pres.ShapeType.rect, {
+          x: 0,
+          y: 0,
+          w: "100%",
+          h: 0.15,
+          fill: { color: "4F46E5" },
+        });
+
+        // Header Subtitle
+        pptSlide.addText(`${moduleCode} • ${moduleTitle}`, {
+          x: 0.5,
+          y: 0.3,
+          w: 9,
+          h: 0.3,
+          fontSize: 10,
+          color: "64748B",
+          bold: true,
+        });
+
+        // Slide Title
+        pptSlide.addText(s.title.replace(/[*#]/g, ""), {
+          x: 0.5,
+          y: 0.7,
+          w: 9,
+          h: 0.8,
+          fontSize: 22,
+          bold: true,
+          color: "0F172A",
+        });
+
+        // Content
+        const cleanText = s.textContent
+          .replace(/```[a-z]*/g, "")
+          .replace(/```/g, "")
+          .replace(/\*\*/g, "");
+
+        pptSlide.addText(cleanText, {
+          x: 0.5,
+          y: 1.6,
+          w: 9,
+          h: 3.5,
+          fontSize: 13,
+          color: "334155",
+          valign: "top",
+          bullet: true,
+        });
+
+        // Exam Note
+        if (s.briefExplanation) {
+          pptSlide.addText(`Key Exam Note: ${s.briefExplanation}`, {
+            x: 0.5,
+            y: 5.3,
+            w: 9,
+            h: 0.8,
+            fontSize: 11,
+            color: "4338CA",
+            fill: { color: "EEF2FF" },
+            margin: 10,
+          });
+        }
+
+        // Footer
+        pptSlide.addText(`Slide ${idx + 1} of ${slidesToExport.length} • Study Partner Platform`, {
+          x: 0.5,
+          y: 6.8,
+          w: 9,
+          h: 0.3,
+          fontSize: 9,
+          color: "94A3B8",
+        });
+      });
+
+      const filename = `${moduleTitle.replace(/[^a-zA-Z0-9_-]/g, "_")}_Slides.pptx`;
+      pres.writeFile({ fileName: filename });
+    } catch (err) {
+      console.error("Failed to generate PPTX", err);
+      alert("Error generating PowerPoint file.");
+    }
+  };
 
   // Helper to strip raw markdown symbols and parse content into real PowerPoint elements
   const renderPowerPointContent = (text: string) => {
@@ -225,10 +323,9 @@ export const PowerPointSlideRenderer: React.FC<PowerPointSlideRendererProps> = (
   };
 
   // Convert embed YouTube URL or build working YouTube search link
-  const youtubeEmbedUrl = slide.youtubeTutorialUrl || "https://www.youtube-nocookie.com/embed/cz3WRR21vK4";
-  const youtubeSearchLink = `https://www.youtube.com/results?search_query=${encodeURIComponent(
-    slide.youtubeQuery || `${slide.title} database tutorial`
-  )}`;
+  const youtubeSearchQuery = slide.youtubeQuery || `${slide.title} ${moduleTitle} tutorial`;
+  const youtubeSearchLink = `https://www.youtube.com/results?search_query=${encodeURIComponent(youtubeSearchQuery)}`;
+  const youtubeEmbedUrl = slide.youtubeTutorialUrl || `https://www.youtube-nocookie.com/embed?listType=search&list=${encodeURIComponent(youtubeSearchQuery)}`;
 
   return (
     <div className={`w-full transition-all ${isFullscreen ? "fixed inset-0 z-50 bg-slate-900 p-4 sm:p-8 overflow-y-auto flex flex-col justify-between" : ""}`}>
@@ -245,7 +342,17 @@ export const PowerPointSlideRenderer: React.FC<PowerPointSlideRendererProps> = (
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Download PowerPoint (.pptx) File */}
+          <button
+            onClick={handleExportPPTX}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+            title="Download presentation as PowerPoint (.pptx) file"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Download PPTX
+          </button>
+
           {/* Complete Slide Toggle */}
           <button
             onClick={onToggleComplete}

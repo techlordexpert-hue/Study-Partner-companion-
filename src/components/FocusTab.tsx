@@ -20,17 +20,30 @@ import {
 interface FocusTabProps {
   userProfile: UserProfile;
   onLogFocusSession: (session: FocusSession) => void;
+  isRunning: boolean;
+  secondsElapsed: number;
+  timerMode: "stopwatch" | "pomodoro";
+  pomodoroTargetSeconds: number;
+  onStartTimer: () => void;
+  onPauseTimer: () => void;
+  onStopTimer: () => void;
+  onSetTimerMode: (mode: "stopwatch" | "pomodoro") => void;
+  onSetPomodoroTargetSeconds: (secs: number) => void;
 }
 
 export const FocusTab: React.FC<FocusTabProps> = ({
   userProfile,
   onLogFocusSession,
+  isRunning,
+  secondsElapsed,
+  timerMode,
+  pomodoroTargetSeconds,
+  onStartTimer,
+  onPauseTimer,
+  onStopTimer,
+  onSetTimerMode,
+  onSetPomodoroTargetSeconds,
 }) => {
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [secondsElapsed, setSecondsElapsed] = useState<number>(0);
-  const [timerMode, setTimerMode] = useState<"stopwatch" | "pomodoro">("stopwatch");
-  const [pomodoroTargetSeconds, setPomodoroTargetSeconds] = useState<number>(25 * 60);
-
   // Voice Alert state
   const [voiceSpoken, setVoiceSpoken] = useState<boolean>(false);
   const [ambientSound, setAmbientSound] = useState<"none" | "rain" | "lofi" | "whitenoise">("none");
@@ -96,49 +109,22 @@ export const FocusTab: React.FC<FocusTabProps> = ({
     }
   };
 
-  // Stopwatch/Timer Interval
-  useEffect(() => {
-    let interval: any = null;
-    if (isRunning) {
-      interval = setInterval(() => {
-        setSecondsElapsed((prev) => prev + 1);
-      }, 1000);
-    } else {
-      clearInterval(interval);
-    }
-    return () => clearInterval(interval);
-  }, [isRunning]);
-
   // Handle Start Timer Click
   const handleStartTimer = () => {
     if (!isRunning) {
-      // Trigger voice alert mandatory requirement
       speakVoiceAlert();
-      setIsRunning(true);
+      onStartTimer();
     }
   };
 
   // Handle Pause Timer
   const handlePauseTimer = () => {
-    setIsRunning(false);
+    onPauseTimer();
   };
 
-  // Handle Reset Timer & Log Session if duration > 1 min
+  // Handle Reset/Stop Timer & Log Session
   const handleResetTimer = () => {
-    if (secondsElapsed >= 60) {
-      const minutesSpent = Math.round(secondsElapsed / 60);
-      const newSession: FocusSession = {
-        id: `fs-${Date.now()}`,
-        date: new Date().toLocaleDateString(),
-        durationMinutes: minutesSpent,
-        mode: timerMode,
-        notes: `Studied for ${minutesSpent} minutes in Focus Mode`,
-      };
-      onLogFocusSession(newSession);
-      setSessionLogs((prev) => [newSession, ...prev]);
-    }
-    setIsRunning(false);
-    setSecondsElapsed(0);
+    onStopTimer();
   };
 
   // Format Time Display (HH:MM:SS or MM:SS)
@@ -250,9 +236,7 @@ export const FocusTab: React.FC<FocusTabProps> = ({
         <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200 z-10">
           <button
             onClick={() => {
-              setTimerMode("stopwatch");
-              setSecondsElapsed(0);
-              setIsRunning(false);
+              onSetTimerMode("stopwatch");
             }}
             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               timerMode === "stopwatch"
@@ -265,9 +249,7 @@ export const FocusTab: React.FC<FocusTabProps> = ({
 
           <button
             onClick={() => {
-              setTimerMode("pomodoro");
-              setSecondsElapsed(0);
-              setIsRunning(false);
+              onSetTimerMode("pomodoro");
             }}
             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               timerMode === "pomodoro"

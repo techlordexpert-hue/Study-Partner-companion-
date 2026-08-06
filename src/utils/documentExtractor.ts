@@ -90,7 +90,8 @@ export async function extractDocumentData(file: File): Promise<ExtractionResult>
         if (textMatches.length > 0) {
           const slideTitle = textMatches[0] || `Slide ${i + 1}`;
           const bodyLines = textMatches.slice(1);
-          const slideText = bodyLines.length > 0 ? bodyLines.map((l) => `- ${l}`).join("\n") : textMatches.join("\n");
+          // Preserve natural line formatting without forcing bullet prefixes onto every line
+          const slideText = bodyLines.length > 0 ? bodyLines.join("\n") : textMatches.join("\n");
 
           extractedSlides.push({
             slideNumber: i + 1,
@@ -98,7 +99,7 @@ export async function extractDocumentData(file: File): Promise<ExtractionResult>
             text: slideText,
           });
 
-          fullTextParts.push(`### Slide ${i + 1}: ${slideTitle}\n${slideText}`);
+          fullTextParts.push(`### ${slideTitle.toUpperCase()}\n\n${slideText}`);
         }
       }
 

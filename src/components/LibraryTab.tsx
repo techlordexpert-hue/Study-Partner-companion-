@@ -290,18 +290,26 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
 
       const parsedSlides: Slide[] = slidesList.map((s: any, idx: number) => {
         const query = s.youtubeQuery || `${s.title || "Lecture"} ${uploadTitle} tutorial`;
+        const slideTitle = s.title || `Slide ${idx + 1}`;
+        let rawContent = s.text || s.textContent || effectiveText || "Slide Content";
+
+        // Prepend clean Markdown header matching database lecture slide format if not present
+        if (rawContent && !rawContent.trim().startsWith("#")) {
+          rawContent = `### ${slideTitle.toUpperCase()}\n\n${rawContent}`;
+        }
+
         return {
           id: `custom-${Date.now()}-${idx}`,
           slideNumber: idx + 1,
-          title: s.title || `Slide ${idx + 1}`,
-          textContent: s.text || s.textContent || effectiveText || "Slide Content",
+          title: slideTitle,
+          textContent: rawContent,
           briefExplanation: s.explanation || "Key concept extracted from uploaded material.",
           youtubeTutorialUrl: `https://www.youtube-nocookie.com/embed?listType=search&list=${encodeURIComponent(
             query
           )}`,
           youtubeQuery: query,
           researchTopics:
-            s.researchTopics && s.researchTopics.length > 0 ? s.researchTopics : [s.title || uploadTitle, uploadTitle],
+            s.researchTopics && s.researchTopics.length > 0 ? s.researchTopics : [slideTitle, uploadTitle],
         };
       });
 

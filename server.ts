@@ -166,18 +166,18 @@ Title / Course Name: ${title || "Uploaded Course Document"}
 ${rawText ? `Extracted Text Content:\n${rawText.slice(0, 15000)}` : ""}
 
 Instructions:
-1. Extract or generate 4 to 12 logically ordered PowerPoint slides covering all key concepts.
+1. Extract all material into 4 to 12 logically ordered PowerPoint slides covering all key concepts thoroughly without omitting content.
 2. Each slide MUST have a clear title in "title".
-3. "text": Detailed bullet points, formatted markdown, tables (| col1 | col2 |), or code blocks if appropriate.
+3. "text": Format cleanly starting with "### SLIDE TITLE" followed by structured paragraphs, bold terms (**Concept:** Explanation), clean markdown tables (| Col 1 | Col 2 |), code blocks, and bullet points ONLY when listing items. Do NOT put a bullet point in front of every paragraph or header.
 4. "explanation": A concise 2-3 sentence student note highlighting what is tested on exams.
-5. "youtubeQuery": Specific search keywords for YouTube video tutorials on this exact slide topic (e.g., 'photosynthesis light reactions biology tutorial' or 'binary search trees algorithm').
+5. "youtubeQuery": Specific search keywords for YouTube video tutorials on this exact slide topic.
 6. "researchTopics": Array of 2-3 key terms for deep research.
 
 Return a valid JSON array matching this schema:
 [
   {
-    "title": "Slide Title",
-    "text": "- Main bullet point 1\\n- Main bullet point 2\\n| Concept | Detail |",
+    "title": "SLIDE TITLE",
+    "text": "### SLIDE TITLE\\n\\n**Key Concept:** Detailed explanation paragraph.\\n\\n* Bullet item 1\\n* Bullet item 2\\n\\n| Column 1 | Column 2 |",
     "explanation": "Key exam note...",
     "youtubeQuery": "topic course name tutorial",
     "researchTopics": ["Topic 1", "Topic 2"]

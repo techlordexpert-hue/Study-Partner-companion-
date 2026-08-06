@@ -1,0 +1,8 @@
+{
+  "name": "Remix Database Study Partner",
+  "description": "Interactive study partner platform featuring complete DBMS lecture slides, past questions solver with score tracking, AI research assistant, and voice-guided focus timer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

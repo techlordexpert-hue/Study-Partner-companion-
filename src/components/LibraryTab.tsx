@@ -207,23 +207,58 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({
         });
       }
 
-      const response = await fetch("/api/parse-slide-content", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: uploadTitle,
-          rawText: uploadText,
-          fileBase64,
-          fileMimeType,
-        }),
-      });
+      let slidesList: any[] = [];
 
-      const data = await response.json();
-      if (!data.slides || data.slides.length === 0) {
-        throw new Error("No slides returned");
+      try {
+        const response = await fetch("/api/parse-slide-content", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: uploadTitle,
+            rawText: uploadText,
+            fileBase64,
+            fileMimeType,
+          }),
+        });
+
+        const contentType = response.headers.get("content-type");
+        if (response.ok && contentType && contentType.includes("application/json")) {
+          const data = await response.json();
+          if (data.slides && data.slides.length > 0) {
+            slidesList = data.slides;
+          }
+        }
+      } catch (err) {
+        console.warn("API parse endpoint unavailable, using client-side fallback parsing:", err);
       }
 
-      const parsedSlides: Slide[] = (data.slides || []).map((s: any, idx: number) => {
+      // Fallback client-side slide generation if API returned non-JSON, 404 or failed
+      if (slidesList.length === 0) {
+        const contentSource = uploadText.trim() || (selectedFile ? `Extracted presentation notes from ${selectedFile.name}` : uploadTitle);
+        const textSections = contentSource.split(/\n\s*\n/).filter((s) => s.trim().length > 0);
+
+        if (textSections.length > 0) {
+          slidesList = textSections.map((sec, i) => ({
+            title: i === 0 ? uploadTitle : `${uploadTitle} - Part ${i + 1}`,
+            text: sec,
+            explanation: `Key takeaway and exam notes for ${uploadTitle}.`,
+            youtubeQuery: `${uploadTitle} tutorial`,
+            researchTopics: [uploadTitle],
+          }));
+        } else {
+          slidesList = [
+            {
+              title: uploadTitle,
+              text: `Slide content for ${uploadTitle}.`,
+              explanation: `Overview of ${uploadTitle}.`,
+              youtubeQuery: `${uploadTitle} tutorial`,
+              researchTopics: [uploadTitle],
+            },
+          ];
+        }
+      }
+
+      const parsedSlides: Slide[] = slidesList.map((s: any, idx: number) => {
         const query = s.youtubeQuery || `${s.title || "Lecture"} ${uploadTitle} tutorial`;
         return {
           id: `custom-${Date.now()}-${idx}`,

@@ -19,6 +19,8 @@ import { PascoTab } from "./components/PascoTab";
 import { FocusTab } from "./components/FocusTab";
 import { AccountTab } from "./components/AccountTab";
 
+import { getDBItem, setDBItem, removeDBItem } from "./utils/storage";
+
 const INITIAL_USER_PROFILE: UserProfile = {
   name: "",
   indexNumber: "",
@@ -70,7 +72,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [timerIsRunning]);
 
-  // Load user profile & session from localStorage
+  // User Profile state with IndexedDB & localStorage fallback
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     try {
       const saved = localStorage.getItem("study_partner_user_profile");
@@ -87,7 +89,7 @@ export default function App() {
     return INITIAL_USER_PROFILE;
   });
 
-  // Courses state (Course-by-Course structure)
+  // Courses state with IndexedDB & localStorage fallback
   const [courses, setCourses] = useState<Course[]>(() => {
     try {
       const saved = localStorage.getItem("study_partner_courses");
@@ -101,24 +103,32 @@ export default function App() {
     return DEFAULT_COURSES;
   });
 
-  // Save profile to localStorage on change
+  // Asynchronous IndexedDB initial hydration on mount
   useEffect(() => {
-    try {
-      if (userProfile.name) {
-        localStorage.setItem("study_partner_user_profile", JSON.stringify(userProfile));
+    async function loadStoredData() {
+      const savedProfile = await getDBItem<UserProfile>("study_partner_user_profile");
+      if (savedProfile && savedProfile.name) {
+        setUserProfile(savedProfile);
+        setIsAuthenticated(true);
       }
-    } catch (e) {
-      console.warn("Could not save user profile to localStorage", e);
+      const savedCourses = await getDBItem<Course[]>("study_partner_courses");
+      if (savedCourses && Array.isArray(savedCourses) && savedCourses.length > 0) {
+        setCourses(savedCourses);
+      }
+    }
+    loadStoredData();
+  }, []);
+
+  // Save profile to IndexedDB & localStorage on change
+  useEffect(() => {
+    if (userProfile.name) {
+      setDBItem("study_partner_user_profile", userProfile);
     }
   }, [userProfile]);
 
-  // Save courses to localStorage on change
+  // Save courses to IndexedDB & localStorage on change
   useEffect(() => {
-    try {
-      localStorage.setItem("study_partner_courses", JSON.stringify(courses));
-    } catch (e) {
-      console.warn("Could not save courses to localStorage", e);
-    }
+    setDBItem("study_partner_courses", courses);
   }, [courses]);
 
   const handleAuthenticated = (profileData: { name: string; institution: string }) => {
